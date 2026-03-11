@@ -5,6 +5,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
 class Project(Base):
+    """
+    SQLAlchemy model representing an active or completed project.
+    Links a job query with a client and a selected freelancer.
+    """
     __tablename__ = "projects"
 
     project_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

@@ -3,115 +3,175 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 
+const statusConfig = {
+  active:        { color:'var(--primary-light)', bg:'rgba(99,102,241,0.15)', icon:'⚡', label:'Active' },
+  work_submitted:{ color:'#fcd34d', bg:'rgba(245,158,11,0.12)', icon:'📤', label:'Work Submitted' },
+  approved:      { color:'#86efac', bg:'rgba(34,197,94,0.12)',  icon:'✅', label:'Approved' },
+  completed:     { color:'#86efac', bg:'rgba(34,197,94,0.12)',  icon:'✅', label:'Completed' },
+};
+
 const ProjectDashboard = () => {
   const { id } = useParams();
   const { user } = useContext(AuthContext);
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchProject();
-  }, [id]);
 
   const fetchProject = async () => {
     try {
-      const res = await api.get('/projects');
-      const found = res.data.find(p => p.project_id === parseInt(id));
-      if (found) setProject(found);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      // Try direct endpoint first, fallback to list
+      try {
+        const res = await api.get(`/projects/${id}`);
+        setProject(res.data);
+      } catch {
+        const res = await api.get('/projects');
+        const found = res.data.find(p => p.project_id === parseInt(id));
+        setProject(found || null);
+      }
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
+
+  useEffect(() => { fetchProject(); }, [id]);
 
   const handleApprove = async () => {
+    if (!window.confirm('Approve this submission? This will mark the project complete.')) return;
+    setApproving(true);
     try {
-      if (confirm('Are you sure you want to approve this work? This cannot be undone.')) {
-        await api.put(`/projects/${id}/approve`);
-        fetchProject();
-        alert('Work approved successfully!');
-      }
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Error approving work');
-    }
+      await api.put(`/projects/${id}/approve`);
+      await fetchProject();
+    } catch (err) { alert(err.response?.data?.detail || 'Error approving work'); }
+    finally { setApproving(false); }
   };
 
-  if (loading) return <div>Loading project details...</div>;
-  if (!project) return <div>Project not found or unauthorized.</div>;
+  if (loading) return <div className="loading-page"><div className="spinner" /><p className="loading-text">Loading project workspace...</p></div>;
+  if (!project) return <div className="page-wrapper container"><div className="card empty-state"><div className="empty-icon">❌</div><h3>Project not found</h3><Link to="/dashboard" className="btn btn-primary mt-4">Back to Dashboard</Link></div></div>;
 
-  const isClient = user.role === 'client' && user.user_id === project.client_id;
-  const isFreelancer = user.role === 'freelancer' && user.user_id === project.freelancer_id;
+  const sc = statusConfig[project.status] || statusConfig.active;
+  const isClient = user?.role === 'client' && user?.user_id === project.client_id;
+  const isFreelancer = user?.role === 'freelancer' && user?.user_id === project.freelancer_id;
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-4">
-        <Link to="/dashboard" className="text-blue-500 hover:text-blue-700">← Back to Dashboard</Link>
+    <div>
+      <div className="page-banner">
+        <div className="container">
+          <Link to="/dashboard" className="back-link" style={{ color:'rgba(255,255,255,0.6)', marginBottom:'1rem', display:'inline-flex' }}>← Back to Dashboard</Link>
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            <div className="section-tag">🚀 Project Workspace</div>
+            <span className="status-pill" style={{ background: sc.bg, color: sc.color }}>
+              {sc.icon} {sc.label}
+            </span>
+          </div>
+          <h1>Project #{project.project_id}</h1>
+        </div>
       </div>
-      
-      <div className="card p-8">
-        <div className="flex justify-between items-start mb-6">
-          <h1 className="text-3xl font-bold">Project Workspace #{project.project_id}</h1>
-          <span className={`px-4 py-2 rounded-full font-bold text-sm ${
-            project.status === 'active' ? 'bg-blue-100 text-blue-800' :
-            project.status === 'work_submitted' ? 'bg-yellow-100 text-yellow-800' :
-            'bg-green-100 text-green-800'
-          }`}>
-            {project.status.toUpperCase()}
-          </span>
-        </div>
 
-        <div className="grid md-grid-cols-2 gap-6 mb-8 border-b pb-8" style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem'}}>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="font-bold text-gray-500 text-sm mb-2">PROJECT DETAILS</h3>
-            <p><strong>Job Reference:</strong> #{project.job_id}</p>
-            <p><strong>Started:</strong> {new Date(project.start_date).toLocaleDateString()}</p>
-            {project.end_date && <p><strong>Ended:</strong> {new Date(project.end_date).toLocaleDateString()}</p>}
-          </div>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="font-bold text-gray-500 text-sm mb-2">PARTICIPANTS</h3>
-            <p><strong>Client:</strong> User #{project.client_id}</p>
-            <p><strong>Freelancer:</strong> User #{project.freelancer_id}</p>
-          </div>
-        </div>
-
-        {project.work_notes && (
-          <div className="mb-8">
-            <h2 className="text-xl font-bold mb-4">Submitted Work Notes</h2>
-            <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-              <p className="whitespace-pre-wrap">{project.work_notes}</p>
+      <div className="page-wrapper container" style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:'2rem', alignItems:'start' }}>
+        {/* Main */}
+        <div>
+          {/* Project details */}
+          <div className="card mb-6">
+            <h2 style={{ fontSize:'1.2rem', marginBottom:'1.5rem' }}>📋 Project Details</h2>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
+              <div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Job Reference</div>
+                <div><Link to={`/jobs/${project.job_id}`} style={{ color:'var(--primary-light)', fontWeight:700 }}>Job #{project.job_id} →</Link></div>
+              </div>
+              <div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Project Status</div>
+                <span className="status-pill" style={{ background:sc.bg, color:sc.color }}>{sc.icon} {sc.label}</span>
+              </div>
+              <div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Start Date</div>
+                <div style={{ fontWeight:600 }}>{new Date(project.start_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+              </div>
+              {project.end_date && (
+                <div>
+                  <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Completed</div>
+                  <div style={{ fontWeight:600 }}>{new Date(project.end_date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Client</div>
+                <div style={{ fontWeight:600 }}>User #{project.client_id} {isClient && '(You)'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-dim)', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.35rem' }}>Freelancer</div>
+                <div style={{ fontWeight:600 }}>User #{project.freelancer_id} {isFreelancer && '(You)'}</div>
+              </div>
             </div>
           </div>
-        )}
 
-        <div className="flex gap-4 border-t pt-6 justify-end">
-          {/* Freelancer actions */}
-          {isFreelancer && project.status === 'active' && (
-            <Link to={`/projects/${project.project_id}/submit`} className="btn btn-primary font-bold">
-              Submit Work
-            </Link>
+          {/* Submitted work */}
+          {project.work_notes && (
+            <div className="card mb-6" style={{ background:'rgba(34,197,94,0.05)', border:'1px solid rgba(34,197,94,0.2)' }}>
+              <h2 style={{ fontSize:'1.2rem', marginBottom:'1rem', color:'#86efac' }}>📤 Submitted Work</h2>
+              <div style={{ color:'var(--text-muted)', whiteSpace:'pre-wrap', lineHeight:1.8, fontSize:'0.95rem' }}>{project.work_notes}</div>
+            </div>
           )}
 
-          {/* Client actions */}
-          {isClient && project.status === 'active' && (
-            <Link to={`/projects/${project.project_id}/payment`} className="btn btn-primary font-bold">
-              Fund Escrow
-            </Link>
-          )}
+          {/* Action Buttons */}
+          <div className="card" style={{ padding:'2rem' }}>
+            <h3 style={{ fontSize:'1rem', marginBottom:'1.5rem', color:'var(--text-muted)', fontWeight:700 }}>AVAILABLE ACTIONS</h3>
+            <div className="flex gap-3 flex-wrap">
+              {/* Freelancer: submit work */}
+              {isFreelancer && project.status === 'active' && (
+                <Link to={`/projects/${project.project_id}/submit`} className="btn btn-primary">
+                  📤 Submit Work
+                </Link>
+              )}
 
-          {isClient && project.status === 'work_submitted' && (
-            <button onClick={handleApprove} className="btn btn-primary font-bold bg-green-600 hover:bg-green-700">
-              Approve Work
-            </button>
-          )}
+              {/* Client: fund escrow */}
+              {isClient && project.status === 'active' && (
+                <Link to={`/projects/${project.project_id}/payment`} className="btn btn-secondary">
+                  💳 Fund Escrow
+                </Link>
+              )}
 
-          {/* Shared actions when completed */}
-          {(project.status === 'completed' || project.status === 'approved') && (
-            <Link to={`/projects/${project.project_id}/review`} className="btn btn-primary font-bold bg-yellow-500 hover:bg-yellow-600 border-none">
-              Leave a Review
-            </Link>
-          )}
+              {/* Client: approve submitted work */}
+              {isClient && project.status === 'work_submitted' && (
+                <button onClick={handleApprove} disabled={approving} className="btn btn-accent">
+                  {approving ? '⏳ Approving...' : '✅ Approve Work'}
+                </button>
+              )}
+
+              {/* Both: leave review when completed */}
+              {(project.status === 'completed' || project.status === 'approved') && (
+                <Link to={`/projects/${project.project_id}/review`} className="btn btn-primary">
+                  ⭐ Leave a Review
+                </Link>
+              )}
+
+              {/* No actions available */}
+              {!isClient && !isFreelancer && (
+                <p style={{ color:'var(--text-dim)', fontSize:'0.875rem' }}>No actions available.</p>
+              )}
+              {(isClient || isFreelancer) && project.status === 'approved' && (
+                <p style={{ color:'#86efac', fontSize:'0.875rem' }}>🎉 Project successfully completed!</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar: quick nav */}
+        <div style={{ position:'sticky', top:90 }}>
+          <div className="card">
+            <h3 style={{ fontSize:'0.875rem', fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'1.25rem' }}>Quick Navigation</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+              <Link to="/dashboard" className="btn btn-outline btn-sm" style={{ justifyContent:'flex-start' }}>📊 Dashboard</Link>
+              <Link to={`/jobs/${project.job_id}`} className="btn btn-ghost btn-sm" style={{ justifyContent:'flex-start' }}>📋 View Job Listing</Link>
+              {isFreelancer && project.status === 'active' && (
+                <Link to={`/projects/${project.project_id}/submit`} className="btn btn-primary btn-sm" style={{ justifyContent:'flex-start' }}>📤 Submit Work</Link>
+              )}
+              {isClient && project.status === 'active' && (
+                <Link to={`/projects/${project.project_id}/payment`} className="btn btn-secondary btn-sm" style={{ justifyContent:'flex-start' }}>💳 Make Payment</Link>
+              )}
+              {(project.status === 'completed' || project.status === 'approved') && (
+                <Link to={`/projects/${project.project_id}/review`} className="btn btn-ghost btn-sm" style={{ justifyContent:'flex-start' }}>⭐ Leave Review</Link>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

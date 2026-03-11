@@ -5,6 +5,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
 class Bid(Base):
+    """
+    SQLAlchemy model representing a freelancer's bid on a job.
+    Enforces that a freelancer can only bid once per job.
+    """
     __tablename__ = "bids"
 
     bid_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

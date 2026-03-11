@@ -6,6 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
 class Review(Base):
+    """
+    SQLAlchemy model representing user feedback on completed projects.
+    Enforces that a user can only leave one review per project.
+    """
     __tablename__ = "reviews"
 
     review_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

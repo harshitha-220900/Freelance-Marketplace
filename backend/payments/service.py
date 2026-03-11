@@ -1,20 +1,21 @@
-from typing import List
+from typing import Sequence, Optional
 from sqlalchemy.future import select
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 from payments.models import Transaction
 from payments.schemas import TransactionCreate
 from projects.service import get_project
 
-async def hold_payment(db: AsyncSession, transaction: TransactionCreate, client_id: int):
+async def hold_payment(db: AsyncSession, transaction: TransactionCreate, client_id: int) -> Transaction:
+    """Place a payment in escrow for an active project."""
     # Verify project exists and belongs to the client
     project = await get_project(db, transaction.project_id)
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     if project.client_id != client_id:
-        raise HTTPException(status_code=403, detail="Only the project client can hold payment")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the project client can hold payment")
         
     db_transaction = Transaction(
         project_id=project.project_id,
@@ -28,7 +29,8 @@ async def hold_payment(db: AsyncSession, transaction: TransactionCreate, client_
     await db.refresh(db_transaction)
     return db_transaction
 
-async def release_payment(db: AsyncSession, project_id: int, client_id: int):
+async def release_payment(db: AsyncSession, project_id: int, client_id: int) -> Transaction:
+    """Release a held payment to the freelancer."""
     # Get the held transaction for this project
     query = select(Transaction).where(
         Transaction.project_id == project_id,
@@ -38,16 +40,17 @@ async def release_payment(db: AsyncSession, project_id: int, client_id: int):
     transaction = result.scalars().first()
     
     if not transaction:
-        raise HTTPException(status_code=404, detail="No held payment found for this project")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No held payment found for this project")
     if transaction.client_id != client_id:
-        raise HTTPException(status_code=403, detail="Only the client can release payment")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the client can release payment")
         
     transaction.status = 'released'
     await db.commit()
     await db.refresh(transaction)
     return transaction
 
-async def get_transaction_history(db: AsyncSession, user_id: int):
+async def get_transaction_history(db: AsyncSession, user_id: int) -> Sequence[Transaction]:
+    """Retrieve all transactions associated with a user."""
     query = select(Transaction).where(or_(Transaction.client_id == user_id, Transaction.freelancer_id == user_id))
     result = await db.execute(query)
     return result.scalars().all()

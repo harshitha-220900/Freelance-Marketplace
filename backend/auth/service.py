@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Any
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
@@ -15,13 +15,20 @@ from database import get_db
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-def verify_password(plain_password, hashed_password):
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain password against the stored hash."""
     return pwd_context.verify(plain_password, hashed_password)
 
-def get_password_hash(password):
+def get_password_hash(password: str) -> str:
+    """Generate a hash for the provided password."""
+    # print(f"DEBUG: Hashing password of length {len(password)}")
+    if len(password) > 72:
+        # Fallback/Safety for bcrypt limits
+        password = password[:72]
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """Create a new JWT access token."""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -31,11 +38,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
-async def get_user_by_email(db: AsyncSession, email: str):
+async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
+    """Retrieve a user by their email address."""
     result = await db.execute(select(User).where(User.email == email))
     return result.scalars().first()
 
-async def create_user(db: AsyncSession, user: UserCreate):
+async def create_user(db: AsyncSession, user: UserCreate) -> User:
+    """Create a new user and store it in the database."""
     hashed_password = get_password_hash(user.password)
     db_user = User(
         name=user.name,
@@ -50,7 +59,8 @@ async def create_user(db: AsyncSession, user: UserCreate):
     await db.refresh(db_user)
     return db_user
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
+    """Retrieve the currently authenticated user using the JWT token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -58,7 +68,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        email: str = payload.get("sub")
+        email: Optional[str] = payload.get("sub")
         if email is None:
             raise credentials_exception
     except JWTError:

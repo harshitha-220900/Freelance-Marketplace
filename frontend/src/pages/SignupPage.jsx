@@ -3,81 +3,92 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const SignupPage = () => {
-  const [formData, setFormData] = useState({
-    name: '', email: '', password: '', role: 'client', bio: '', skills: ''
-  });
+  const [formData, setFormData] = useState({ name:'', email:'', password:'', role:'freelancer', bio:'', skills:'' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       await register(formData);
       navigate('/dashboard');
     } catch (err) {
       const detail = err.response?.data?.detail;
-      setError(
-        typeof detail === 'string' 
-          ? detail 
-          : Array.isArray(detail) 
-            ? detail[0].msg 
-            : 'Error signing up'
-      );
+      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail[0].msg : 'Registration failed. Please check your details.');
+    } finally {
+      setLoading(false);
     }
   };
 
+  const set = (field) => (e) => setFormData(prev => ({ ...prev, [field]: e.target.value }));
+
   return (
-    <div className="max-w-md mx-auto mt-8">
-      <div className="card">
-        <h2 className="text-2xl font-bold mb-6 text-center">Join FreelanceHub</h2>
-        {error && <div className="bg-red-100 text-red-800 p-3 rounded mb-4">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <button
-              type="button"
-              className={`py-2 px-4 rounded font-bold ${formData.role === 'client' ? 'bg-primary text-white' : 'bg-gray-100'}`}
-              style={formData.role === 'client' ? {backgroundColor: 'var(--primary)', color: 'white'} : {}}
-              onClick={() => setFormData({...formData, role: 'client'})}
-            >I'm a Client</button>
-            <button
-              type="button"
-              className={`py-2 px-4 rounded font-bold ${formData.role === 'freelancer' ? 'bg-primary text-white' : 'bg-gray-100'}`}
-              style={formData.role === 'freelancer' ? {backgroundColor: 'var(--primary)', color: 'white'} : {}}
-              onClick={() => setFormData({...formData, role: 'freelancer'})}
-            >I'm a Freelancer</button>
+    <div className="auth-page" style={{ paddingTop: '5rem', paddingBottom: '5rem' }}>
+      <div className="auth-card" style={{ maxWidth: 500 }}>
+        <div className="auth-logo">
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', marginBottom:'0.5rem' }}>
+            <div style={{ width:40, height:40, background:'linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.1rem', boxShadow:'0 4px 20px rgba(99,102,241,0.4)' }}>⚡</div>
+            <span style={{ fontSize:'1.5rem', fontWeight:900, fontFamily:"'Plus Jakarta Sans',sans-serif" }}>Freelance<span style={{ background:'linear-gradient(90deg,#818cf8,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Hub</span></span>
           </div>
-          
+          <h2 style={{ fontSize:'1.6rem', marginBottom:'0.35rem' }}>Create your account 🚀</h2>
+          <p style={{ color:'var(--text-muted)', fontSize:'0.875rem' }}>Join 50,000+ professionals on FreelanceHub</p>
+        </div>
+
+        {/* Role Toggle */}
+        <div className="role-toggle">
+          <button type="button" className={`role-btn ${formData.role === 'freelancer' ? 'active' : ''}`} onClick={() => setFormData(p => ({...p, role:'freelancer'}))}>
+            🧑‍💻 I'm a Freelancer
+          </button>
+          <button type="button" className={`role-btn ${formData.role === 'client' ? 'active' : ''}`} onClick={() => setFormData(p => ({...p, role:'client'}))}>
+            🏢 I'm a Client
+          </button>
+        </div>
+
+        {error && <div className="form-error">⚠️ {error}</div>}
+
+        <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">Full Name</label>
-            <input name="name" type="text" className="form-input" value={formData.name} onChange={handleChange} required />
+            <input type="text" className="form-input" placeholder="John Doe" value={formData.name} onChange={set('name')} required />
           </div>
           <div className="form-group">
-            <label className="form-label">Email</label>
-            <input name="email" type="email" className="form-input" value={formData.email} onChange={handleChange} required />
+            <label className="form-label">Email Address</label>
+            <input type="email" className="form-input" placeholder="john@example.com" value={formData.email} onChange={set('email')} required />
           </div>
           <div className="form-group">
             <label className="form-label">Password</label>
-            <input name="password" type="password" className="form-input" value={formData.password} onChange={handleChange} required />
+            <input type="password" className="form-input" placeholder="Min. 8 characters" value={formData.password} onChange={set('password')} required minLength={6} />
           </div>
           <div className="form-group">
-            <label className="form-label">Bio (Optional)</label>
-            <textarea name="bio" className="form-input" value={formData.bio} onChange={handleChange} rows="3"></textarea>
+            <label className="form-label">Short Bio <span style={{color:'var(--text-dim)',fontWeight:400}}>(optional)</span></label>
+            <textarea className="form-input" placeholder="Tell clients / freelancers about yourself..." value={formData.bio} onChange={set('bio')} rows={2} style={{ minHeight:70 }} />
           </div>
           {formData.role === 'freelancer' && (
             <div className="form-group">
-              <label className="form-label">Skills (Comma separated)</label>
-              <input name="skills" type="text" className="form-input" value={formData.skills} onChange={handleChange} placeholder="e.g. React, Node.js, Python" />
+              <label className="form-label">Skills <span style={{color:'var(--text-dim)',fontWeight:400}}>(comma separated)</span></label>
+              <input type="text" className="form-input" placeholder="React, Node.js, Python, UI/UX..." value={formData.skills} onChange={set('skills')} />
             </div>
           )}
-          <button type="submit" className="btn btn-primary w-full mt-4">Sign Up</button>
+          <button type="submit" className="btn btn-primary btn-full" style={{ padding:'0.9rem', marginTop:'0.5rem' }} disabled={loading}>
+            {loading ? '⏳ Creating account...' : `🚀 Create ${formData.role === 'client' ? 'Client' : 'Freelancer'} Account`}
+          </button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-600">
-          Already have an account? <Link to="/login" className="font-bold">Login here</Link>
+
+        <div className="auth-divider"><span>or</span></div>
+
+        <p style={{ textAlign:'center', fontSize:'0.875rem', color:'var(--text-muted)' }}>
+          Already a member?{' '}
+          <Link to="/login" style={{ color:'var(--primary-light)', fontWeight:700 }}>Sign in →</Link>
+        </p>
+
+        <p style={{ textAlign:'center', fontSize:'0.75rem', color:'var(--text-dim)', marginTop:'1rem' }}>
+          By creating an account, you agree to our{' '}
+          <a href="#" style={{ color:'var(--text-muted)' }}>Terms of Service</a> and{' '}
+          <a href="#" style={{ color:'var(--text-muted)' }}>Privacy Policy</a>
         </p>
       </div>
     </div>

@@ -6,6 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 class Job(Base):
+    """
+    SQLAlchemy model representing a job posted by a client.
+    Captures budget, timeline, descripion, and current status.
+    """
     __tablename__ = "jobs"
 
     job_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

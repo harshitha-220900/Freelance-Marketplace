@@ -6,6 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
 class User(Base):
+    """
+    SQLAlchemy model representing a system user.
+    Defines role, email, password hashes, and user metadata.
+    """
     __tablename__ = "users"
 
     user_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

@@ -9,29 +9,35 @@ from auth.schemas import UserOut
 
 router = APIRouter()
 
-@router.post("", response_model=schemas.JobOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.JobOut, status_code=status.HTTP_201_CREATED, summary="Create a new job", description="Allows a client to post a new job.")
 async def create_job(
     job: schemas.JobCreate,
     db: AsyncSession = Depends(get_db),
     current_user: UserOut = Depends(get_current_user)
 ):
     if current_user.role != 'client':
-        raise HTTPException(status_code=403, detail="Only clients can post jobs.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Only clients can post jobs."
+        )
     return await service.create_job(db=db, job=job, client_id=current_user.user_id)
 
-@router.get("", response_model=List[schemas.JobOut])
+@router.get("", response_model=List[schemas.JobOut], summary="List all jobs", description="Retrieve a list of jobs, optionally filtered by status.")
 async def list_jobs(
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     return await service.get_jobs(db=db, status=status)
 
-@router.get("/{job_id}", response_model=schemas.JobOut)
+@router.get("/{job_id}", response_model=schemas.JobOut, summary="Get job details", description="Retrieve details of a specific job by its ID.")
 async def get_job(
     job_id: int,
     db: AsyncSession = Depends(get_db)
 ):
     job = await service.get_job(db=db, job_id=job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Job not found"
+        )
     return job

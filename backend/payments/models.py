@@ -5,6 +5,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
 class Transaction(Base):
+    """
+    SQLAlchemy model representing a payment transaction between a client and freelancer.
+    Handles the escrow state of funds (held, released, cancelled).
+    """
     __tablename__ = "transactions"
 
     transaction_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

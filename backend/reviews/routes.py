@@ -9,7 +9,7 @@ from auth.schemas import UserOut
 
 router = APIRouter()
 
-@router.post("", response_model=schemas.ReviewOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=schemas.ReviewOut, status_code=status.HTTP_201_CREATED, summary="Create a review", description="Leave a review for another user on a completed project.")
 async def create_review(
     review: schemas.ReviewCreate,
     db: AsyncSession = Depends(get_db),
@@ -17,7 +17,7 @@ async def create_review(
 ):
     return await service.create_review(db=db, review=review, reviewer_id=current_user.user_id)
 
-@router.get("/user/{user_id}", response_model=List[schemas.ReviewOut])
+@router.get("/user/{user_id}", response_model=List[schemas.ReviewOut], summary="List user reviews", description="Retrieve all reviews left for a specific user.")
 async def list_user_reviews(
     user_id: int,
     db: AsyncSession = Depends(get_db)
