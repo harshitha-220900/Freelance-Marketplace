@@ -7,6 +7,8 @@ from fastapi import HTTPException
 from payments.models import Transaction
 from payments.schemas import TransactionCreate
 from projects.service import get_project
+from notifications.service import create_notification
+from notifications.schemas import NotificationCreate
 
 async def hold_payment(db: AsyncSession, transaction: TransactionCreate, client_id: int):
     # Verify project exists and belongs to the client
@@ -26,6 +28,16 @@ async def hold_payment(db: AsyncSession, transaction: TransactionCreate, client_
     db.add(db_transaction)
     await db.commit()
     await db.refresh(db_transaction)
+
+    # Notify both parties
+    # For Client: Recent activity
+    await create_notification(db, NotificationCreate(
+        user_id=client_id,
+        title="Payment Processed",
+        message=f"You have successfully authorized payment of ${transaction.amount} for Mission #{project.project_id}.",
+        link=f"/projects/{project.project_id}"
+    ))
+    
     return db_transaction
 
 async def release_payment(db: AsyncSession, project_id: int, client_id: int):
