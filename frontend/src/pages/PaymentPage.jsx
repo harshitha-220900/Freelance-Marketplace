@@ -1,282 +1,313 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
-import { 
- CheckCircle, AlertTriangle, Building, DollarSign, CreditCard, Lock, ShieldCheck, ArrowLeft, Calendar, Hash
+import {
+  CheckCircle, AlertCircle, DollarSign, Lock,
+  ShieldCheck, ArrowLeft, Briefcase, Info, CreditCard
 } from 'lucide-react';
 import PageBackground from '../components/PageBackground';
 
 const PaymentPage = () => {
- const { id } = useParams(); // project_id
- const [job, setJob] = useState(null);
- const [loading, setLoading] = useState(false);
- const [verifying, setVerifying] = useState(false);
- const [error, setError] = useState('');
- const [success, setSuccess] = useState(false);
- const [authPassword, setAuthPassword] = useState('');
- const navigate = useNavigate();
+  const { id } = useParams();
+  const [job, setJob]                   = useState(null);
+  const [project, setProject]           = useState(null);
+  const [verifying, setVerifying]       = useState(false);
+  const [error, setError]               = useState('');
+  const [success, setSuccess]           = useState(false);
+  const [authPassword, setAuthPassword] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchBudget = async () => {
+    const init = async () => {
       try {
         const projRes = await api.get('/projects');
-        const project = projRes.data.find(p => p.project_id === parseInt(id));
-        if (project) {
-          if (project.status === 'completed') {
-             setSuccess(true);
-             return;
-          }
-          if (project.status !== 'work_submitted') {
-            setError('DATA LINK FAILURE: Work not yet submitted. Access to payment node denied.');
-            setTimeout(() => navigate(`/projects/${id}`), 3000);
-            return;
-          }
-          const jobRes = await api.get(`/jobs/${project.job_id}`);
-          setJob(jobRes.data);
-        } else {
-           navigate('/dashboard');
+        const found   = projRes.data.find(p => p.project_id === parseInt(id));
+        if (!found) { navigate('/dashboard'); return; }
+        setProject(found);
+        if (found.status === 'completed') { setSuccess(true); return; }
+        if (found.status !== 'work_submitted') {
+          setError('Work has not been submitted yet. Please wait for the freelancer to submit before releasing payment.');
+          setTimeout(() => navigate(`/projects/${id}`), 3000);
+          return;
         }
-      } catch (err) {
-        console.error(err);
+        const jobRes = await api.get(`/jobs/${found.job_id}`);
+        setJob(jobRes.data);
+      } catch {
         navigate('/dashboard');
       }
     };
-    fetchBudget();
+    init();
   }, [id, navigate]);
 
- const handleProcessPayment = async (e) => {
- e.preventDefault();
- if (!job) return;
- setVerifying(true);
- setError('');
- 
- try {
- // 1. Verify Authorization Password
- await api.post('/auth/verify-password', { password: authPassword });
+  const handleProcessPayment = async (e) => {
+    e.preventDefault();
+    if (!authPassword.trim()) { setError('Please enter your password to confirm payment.'); return; }
+    setVerifying(true);
+    setError('');
+    try {
+      await api.post('/auth/verify-password', { password: authPassword });
+      await api.put(`/projects/${id}/approve`);
+      // Step 1: hold (create transaction as 'held')
+      await api.post('/payments', { project_id: parseInt(id), amount: job.budget });
+      // Step 2: immediately release it to the freelancer
+      await api.post(`/payments/release/${id}`);
+      setSuccess(true);
+      setTimeout(() => navigate('/dashboard'), 3000);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Incorrect password. Please try again.');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
-    // 2. Process Final Approval & Synergy
-    await api.put(`/projects/${id}/approve`);
+  /* ── Loading state ── */
+  if (!job && !success) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#070e1c]">
+      <PageBackground variant="dark" />
+      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
- // 3. Create Transaction Record
- await api.post('/payments', {
- project_id: parseInt(id),
- amount: job.budget
- });
+  /* ── Success state ── */
+  if (success) return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#070e1c]/90 backdrop-blur-2xl">
+      <div
+        className="text-center max-w-md w-full mx-4 p-12 rounded-[32px]"
+        style={{
+          background: 'rgba(16,185,129,0.05)',
+          border: '1px solid rgba(16,185,129,0.2)',
+          backdropFilter: 'blur(24px)',
+        }}
+      >
+        <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-6">
+          <CheckCircle size={36} className="text-emerald-400" />
+        </div>
+        <h2 className="text-2xl font-black text-white tracking-tight mb-3">Payment Released!</h2>
+        <p className="text-sm text-white/45 font-medium leading-relaxed mb-8">
+          The payment of <span className="text-emerald-400 font-bold">${Number(job?.budget || 0).toLocaleString()}</span> has been released to the freelancer and the project is now marked as completed.
+        </p>
+        <div className="flex items-center justify-center gap-2 text-sm font-semibold text-emerald-400/60">
+          <div className="w-4 h-4 border-2 border-emerald-500/40 border-t-emerald-400 rounded-full animate-spin" />
+          Redirecting to dashboard...
+        </div>
+      </div>
+    </div>
+  );
 
- setSuccess(true);
- // Notify freelancer is simulated here
- console.log('Notification sent to freelancer: Payment received for project', id);
+  const budget = Number(job?.budget || 0);
 
- setTimeout(() => navigate('/dashboard'), 3000);
- } catch (err) {
- setError(err.response?.data?.detail || 'AUTHENTICATION FAILED. PLEASE VERIFY CREDENTIALS.');
- } finally {
- setVerifying(false);
- }
- };
+  return (
+    <div className="min-h-screen pt-20 pb-16 relative bg-[#070e1c]">
+      <PageBackground variant="dark" />
 
- if (!job && !success) return (
- <div className="min-h-screen pt-24 relative flex items-center justify-center">
- <PageBackground variant="dark" />
- <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
- </div>
- );
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
 
- if (success) return (
- <div className="min-h-screen fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-3xl animate-fade-in">
- <div className="text-center max-w-lg mx-auto px-8 py-16 bg-[#1e293b]/5 rounded-[3rem] border border-emerald-500/30 relative overflow-hidden">
- <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] rounded-full -mr-32 -mt-32"></div>
- 
- <div className="w-24 h-24 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-emerald-500/20">
- <CheckCircle className="w-12 h-12 text-emerald-400" />
- </div>
- <h2 className="text-4xl font-black text-white mb-4 uppercase tracking-tighter">PAYMENT SUCCESSFUL</h2>
- <p className="text-blue-100/90 text-base font-bold uppercase tracking-widest mb-8 leading-relaxed">
- Authorization confirmed. Funds have been released to the freelancer. 
- Mission protocols updated to COMPLETED.
- </p>
- 
- <div className="pt-8 border-t border-[#2563EB]/10">
- <div className="flex items-center justify-center gap-3 text-emerald-400 font-bold text-base uppercase tracking-widest">
- <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
- <span>Syncing Dashboard...</span>
- </div>
- </div>
- </div>
- </div>
- );
+        {/* Back link */}
+        <Link
+          to={`/projects/${id}`}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-white/40 hover:text-white transition-colors mb-8 group"
+        >
+          <ArrowLeft size={15} className="group-hover:-translate-x-1 transition-transform" />
+          Back to Project
+        </Link>
 
- return (
- <div className="min-h-screen pt-20 relative">
- <PageBackground variant="dark" />
- <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
- <div className="mb-10">
- <Link to="/dashboard" className="inline-flex items-center gap-3 text-base font-bold text-blue-100/90 hover:text-white transition-all uppercase tracking-widest group">
- <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
- VantagePoint Hub / Secure Checkout
- </Link>
- </div>
+        {/* Page title */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <DollarSign size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">
+                Project #{id}
+              </p>
+              <h1 className="text-2xl font-black text-white tracking-tight">Release Payment</h1>
+            </div>
+          </div>
+          {project?.job_title && (
+            <p className="text-sm text-white/30 ml-[52px] font-medium">{project.job_title}</p>
+          )}
+        </div>
 
- <div className="grid lg:grid-cols-3 gap-8 items-start">
- {/* Checkout Form */}
- <div className="lg:col-span-2">
- <div className="bg-[#111827]/40 backdrop-blur-3xl rounded-[3rem] border border-[#2563EB]/10 shadow-3xl p-12 lg:p-16 animate-fade-in relative overflow-hidden">
- <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-blue-600/5 blur-[150px] rounded-full -ml-48 -mt-48 pointer-events-none"></div>
- 
- <div className="flex items-center gap-8 mb-16 pb-16 border-b border-[#2563EB]/10">
- <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-800 rounded-[1.8rem] flex items-center justify-center border border-[#2563EB]/20">
- <Lock className="w-10 h-10 text-white" />
- </div>
- <div>
- <h1 className="text-5xl font-black text-white tracking-tighter uppercase leading-none mb-4">SECURE CHECKOUT</h1>
- <div className="flex items-center gap-4">
- <span className="h-[2px] w-12 bg-blue-500/40"></span>
- <p className="text-blue-100/90 font-bold text-base font-black uppercase tracking-widest">TRANSACTION NODE ALPHA-V09</p>
- </div>
- </div>
- </div>
+        <div className="grid lg:grid-cols-5 gap-6 items-start">
 
- {error && (
- <div className="mb-8 p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-base font-bold uppercase text-red-400 flex items-center gap-4 animate-shake tracking-widest">
- <AlertTriangle className="w-5 h-5" />
- {error}
- </div>
- )}
+          {/* ── Main Form ── */}
+          <div className="lg:col-span-3">
+            <div
+              className="rounded-[28px] overflow-hidden"
+              style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(24px)',
+              }}
+            >
+              <form onSubmit={handleProcessPayment}>
 
- <form onSubmit={handleProcessPayment} className="space-y-8">
- {/* Method Selection (Visual Only) */}
- <div className="grid grid-cols-2 gap-4 mb-10">
- <div className="bg-blue-600/10 border border-blue-500/30 rounded-2xl p-4 flex flex-col items-center gap-3 cursor-pointer">
- <CreditCard className="w-6 h-6 text-blue-400" />
- <span className="text-[8px] font-black text-white uppercase tracking-widest">Credit / Debit Card</span>
- </div>
- <div className="bg-[#1e293b]/5 border border-[#2563EB]/20 rounded-2xl p-4 flex flex-col items-center gap-3 opacity-40 cursor-not-allowed">
- <Building className="w-6 h-6 text-white/90" />
- <span className="text-[8px] font-black text-white/90 uppercase tracking-widest">Net Banking</span>
- </div>
- </div>
+                {/* Header strip */}
+                <div className="px-6 pt-6 pb-5 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-2.5">
+                    <Lock size={15} className="text-indigo-400" />
+                    <p className="text-sm font-bold text-white">Confirm & Authorize</p>
+                  </div>
+                  <p className="text-xs text-white/30 font-medium mt-1">
+                    Enter your account password to release the escrow payment to the freelancer.
+                  </p>
+                </div>
 
- <div className="space-y-6">
- <div>
- <label className="block text-base font-bold text-white/80 uppercase tracking-widest mb-3 ml-4">Card Number</label>
- <div className="relative">
- <CreditCard className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-white/10" />
- <input 
- type="text" 
- placeholder="4242 4242 4242 4242"
- className="w-full bg-[#1e293b]/5 border border-[#2563EB]/20 rounded-2xl px-16 py-5 text-white font-black tracking-[0.2em] text-xs focus:border-blue-500 outline-none transition-all"
- required
- />
- </div>
- </div>
+                <div className="p-6 space-y-5">
 
- <div className="grid grid-cols-2 gap-6">
- <div>
- <label className="block text-base font-bold text-white/80 uppercase tracking-widest mb-3 ml-4">Expiry Date</label>
- <div className="relative">
- <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-white/10" />
- <input 
- type="text" 
- placeholder="MM / YY"
- className="w-full bg-[#1e293b]/5 border border-[#2563EB]/20 rounded-2xl px-16 py-5 text-white font-black tracking-[0.2em] text-xs text-center focus:border-blue-500 outline-none transition-all"
- required
- />
- </div>
- </div>
- <div>
- <label className="block text-base font-bold text-white/80 uppercase tracking-widest mb-3 ml-4">CVV / CVC</label>
- <div className="relative">
- <Hash className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-white/10" />
- <input 
- type="password" 
- placeholder="•••"
- className="w-full bg-[#1e293b]/5 border border-[#2563EB]/20 rounded-2xl px-16 py-5 text-white font-black tracking-[0.2em] text-xs text-center focus:border-blue-500 outline-none transition-all"
- required
- />
- </div>
- </div>
- </div>
+                  {/* Error */}
+                  {error && (
+                    <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-red-500/8 border border-red-500/15 text-sm text-red-300 font-medium">
+                      <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+                      {error}
+                    </div>
+                  )}
 
- <div className="pt-8 border-t border-[#2563EB]/10 space-y-6">
- <div className="bg-blue-600/5 border border-blue-500/10 rounded-2xl p-6">
- <label className="block text-base font-bold text-blue-400 uppercase tracking-widest mb-4">Secure Authorization Password</label>
- <input 
- type="password" 
- placeholder="Enter your VantagePoint password to authorize"
- value={authPassword}
- onChange={(e) => setAuthPassword(e.target.value)}
- className="w-full bg-black/40 border border-[#2563EB]/20 rounded-xl px-6 py-4 text-white font-bold text-xs focus:border-blue-500 outline-none transition-all placeholder:text-white/10"
- required
- />
- <p className="text-[8px] font-black text-blue-100/70 uppercase tracking-widest mt-4 flex items-center gap-2">
- <ShieldCheck className="w-3 h-3" />
- Cross-referencing encryption protocols for security
- </p>
- </div>
+                  {/* Password field */}
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-white/60 uppercase tracking-widest mb-2">
+                      <ShieldCheck size={12} className="text-indigo-400" />
+                      Account Password
+                      <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Enter your password to confirm"
+                      value={authPassword}
+                      onChange={e => { setAuthPassword(e.target.value); setError(''); }}
+                      className="w-full px-4 py-3.5 rounded-xl text-sm text-white font-medium focus:outline-none transition-all placeholder-white/[0.12]"
+                      style={{
+                        background: 'rgba(0,0,0,0.3)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        fontFamily: 'inherit',
+                      }}
+                      onFocus={e => { e.target.style.border = '1px solid rgba(99,102,241,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.08)'; }}
+                      onBlur={e => { e.target.style.border = '1px solid rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
+                      required
+                    />
+                    <p className="text-xs text-white/20 font-medium mt-2 flex items-center gap-1.5">
+                      <ShieldCheck size={11} className="text-indigo-400/50" />
+                      Your password is verified securely and never stored in transit.
+                    </p>
+                  </div>
 
- <button 
- type="submit"
- disabled={verifying}
- className="w-full flex items-center justify-center gap-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-6 rounded-[2rem] disabled:opacity-50 disabled:pointer-events-none uppercase tracking-widest text-sm group"
- >
- {verifying ? (
- <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
- ) : (
- <>
- <Lock className="w-5 h-5 group-hover:scale-110 transition-transform" />
- AUTHORIZE PAYMENT - ${Number(job?.budget).toLocaleString()}
- </>
- )}
- </button>
- </div>
- </div>
- </form>
- </div>
- </div>
+                  {/* Confirmation notice */}
+                  <div className="p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.04]">
+                    <div className="flex items-start gap-2.5">
+                      <Info size={13} className="text-amber-400/60 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-white/35 font-medium leading-relaxed">
+                        By confirming, you approve the freelancer's submitted work and release
+                        <span className="text-amber-400/70 font-bold"> ${budget.toFixed(2)}</span> from escrow.
+                        This action <span className="text-white/50 font-bold">cannot be undone</span>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
- {/* Side Info */}
- <div className="space-y-6">
- <div className="bg-slate-900/60 backdrop-blur-2xl rounded-[3rem] border border-[#2563EB]/20 p-10 shadow-2xl">
- <h3 className="text-base font-bold text-blue-400 uppercase tracking-widest mb-8 flex items-center gap-3">
- <DollarSign className="w-5 h-5 text-emerald-400" />
- BILLING SUMMARY
- </h3>
- 
- <div className="space-y-6 mb-10 text-base font-bold uppercase tracking-widest text-white/90">
- <div className="flex justify-between items-start gap-6">
- <span className="text-white/70">PROJECT</span>
- <span className="text-right text-white leading-relaxed max-w-[150px]">
- {job?.title}
- </span>
- </div>
- <div className="flex justify-between items-center bg-[#1e293b]/5 p-4 rounded-2xl">
- <span className="text-white/70">CONTRACT BUDGET</span>
- <span className="text-white">${Number(job?.budget).toLocaleString()}</span>
- </div>
- <div className="flex justify-between items-center bg-[#1e293b]/5 p-4 rounded-2xl border border-blue-500/20">
- <span className="text-white/70">PLATFORM FEE</span>
- <span className="text-emerald-400">FREE // 0.00</span>
- </div>
- </div>
+                {/* Actions */}
+                <div className="flex gap-3 px-6 pb-6">
+                  <button
+                    type="button"
+                    onClick={() => navigate(-1)}
+                    className="px-5 py-3 rounded-xl text-sm font-bold transition-all"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.35)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = '#fff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={verifying}
+                    className="flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl text-sm font-black text-white transition-all active:scale-[0.98] disabled:opacity-50"
+                    style={{
+                      background: verifying ? 'rgba(16,185,129,0.3)' : 'linear-gradient(135deg,#059669,#047857)',
+                      boxShadow: verifying ? 'none' : '0 4px 20px rgba(5,150,105,0.25)',
+                    }}
+                  >
+                    {verifying ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={15} />
+                        Release ${budget.toFixed(2)} to Freelancer
+                      </>
+                    )}
+                  </button>
+                </div>
 
- <div className="pt-8 border-t border-[#2563EB]/10 flex justify-between items-center">
- <span className="text-base font-bold text-white/70 uppercase tracking-widest">TOTAL CHARGE</span>
- <span className="text-4xl font-black text-white">${Number(job?.budget).toLocaleString()}</span>
- </div>
- </div>
+              </form>
+            </div>
+          </div>
 
- <div className="p-8 bg-blue-500/5 border border-blue-500/10 rounded-[2.5rem] backdrop-blur-xl">
- <p className="text-blue-200/30 text-sm font-bold uppercase tracking-wider leading-relaxed italic">
- By authorizing this payment, you confirm the completion of project objectives. 
- Funds will be isolated and then transferred via VantagePoint secure protocols. 
- All transactions are monitored by neural encryption.
- </p>
- </div>
- </div>
- </div>
- </div>
- </div>
- );
+          {/* ── Billing Summary ── */}
+          <div className="lg:col-span-2 space-y-4">
+
+            {/* Summary card */}
+            <div
+              className="rounded-[24px] p-6"
+              style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(24px)',
+              }}
+            >
+              <h3 className="flex items-center gap-2 text-xs font-black text-white/40 uppercase tracking-widest mb-5">
+                <Briefcase size={13} />
+                Payment Summary
+              </h3>
+
+              <div className="space-y-3 mb-5">
+                {[
+                  { label: 'Gig', value: job?.title || `Gig #${project?.job_id}` },
+                  { label: 'Contract budget', value: `$${budget.toFixed(2)}` },
+                  { label: 'Platform fee', value: 'Free', highlight: 'text-emerald-400' },
+                ].map(row => (
+                  <div key={row.label} className="flex items-center justify-between gap-4">
+                    <span className="text-xs font-semibold text-white/35">{row.label}</span>
+                    <span className={`text-xs font-bold ${row.highlight || 'text-white'} text-right max-w-[160px] truncate`}>
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between">
+                <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Total</span>
+                <span className="text-2xl font-black text-white">${budget.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Security note */}
+            <div
+              className="rounded-[20px] p-4"
+              style={{
+                background: 'rgba(99,102,241,0.04)',
+                border: '1px solid rgba(99,102,241,0.12)',
+              }}
+            >
+              <div className="flex items-start gap-2.5">
+                <ShieldCheck size={13} className="text-indigo-400/60 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] text-white/25 font-medium leading-relaxed">
+                  Nexlance uses secure escrow to protect both clients and freelancers. Funds are held until work is approved and released only upon your confirmation.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
 };
 
 export default PaymentPage;
