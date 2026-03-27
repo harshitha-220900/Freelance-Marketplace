@@ -20,12 +20,16 @@ class Settings(BaseSettings):
     # ── App ───────────────────────────────────────────────────
     APP_NAME: str = "Freelance Marketplace API"
     DEBUG: bool = True
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"]
 
     # ── Google OAuth ──────────────────────────────────────────
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:5173/login/callback"
+
+    # ── Stripe ────────────────────────────────────────────────
+    STRIPE_SECRET_KEY: str = "sk_test_dummy_key"
+    STRIPE_WEBHOOK_SECRET: str = "whsec_dummy_secret"
 
     class Config:
         env_file = ".env"          # override any value in a .env file
