@@ -13,6 +13,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <SidebarProvider>
           <App />
         </SidebarProvider>
+        <App />
       </NotificationProvider>
     </AuthProvider>
   </React.StrictMode>

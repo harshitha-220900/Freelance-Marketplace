@@ -58,13 +58,15 @@ export const NotificationProvider = ({ children }) => {
     };
 
     return (
-        <NotificationContext.Provider value={{ 
-            notifications, 
-            unreadCount, 
-            fetchNotifications, 
-            markAsRead, 
+        <NotificationContext.Provider value={{
+            notifications,
+            unreadCount,
+            fetchNotifications,
+            markAsRead,
+
             markAllRead,
             clearAll
+
         }}>
             {children}
         </NotificationContext.Provider>
